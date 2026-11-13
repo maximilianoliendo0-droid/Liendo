@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#315c50">
+<title>Agenda Liendos</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6f3;color:#1d2925;font-family:Arial,sans-serif}
+header{background:#315c50;color:white;padding:22px;border-radius:0 0 22px 22px}
+h1{margin:0;font-size:26px}
+header p{margin:7px 0 0}
+main{max-width:700px;margin:auto;padding:15px}
+.panel,.task{background:white;padding:15px;border-radius:15px;margin-bottom:13px;border:1px solid #e1e8e3}
+h2{font-size:19px;margin-top:0}
+label{display:block;font-size:14px;margin:12px 0 5px;color:#68766f}
+input,select,textarea{width:100%;padding:12px;border:1px solid #d7e0da;border-radius:10px;font-size:16px;background:white}
+textarea{min-height:70px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{cursor:pointer;border:0;border-radius:10px;padding:12px;font-weight:bold}
+.primary{width:100%;background:#315c50;color:white;margin-top:15px;font-size:16px}
+.tabs{display:flex;gap:7px;overflow:auto;margin:10px 0 15px}
+.tabs button{background:white;border:1px solid #ddd;white-space:nowrap}
+.tabs button.active{background:#315c50;color:white}
+.task h3{margin:0 0 7px}
+.meta{font-size:13px;color:#68766f;line-height:1.6}
+.actions{display:flex;gap:8px;margin-top:12px}
+.done{background:#e8f4eb;color:#23643a}
+.del{background:#fff0ed;color:#a43b2b}
+.empty{text-align:center;color:#68766f;padding:25px}
+@media(max-width:400px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>Agenda Liendos ❤️</h1>
+<p>La organización de nuestra familia</p>
+</header>
+<main>
+<nav class="tabs">
+<button class="active" onclick="changeView('all',this)">Todas</button>
+<button onclick="changeView('today',this)">Hoy</button>
+<button onclick="changeView('upcoming',this)">Próximas</button>
+</nav>
+
+<section class="panel" id="formPanel">
+<h2>＋ Nueva tarea</h2>
+<form id="taskForm">
+<label>¿Qué hay que hacer?</label>
+<input id="title" required placeholder="Ej. Reunión en la escuela">
+
+<div class="grid">
+<div>
+<label>¿Para quién?</label>
+<select id="person">
+<option>Papá</option>
+<option>Mamá</option>
+<option>Fran</option>
+<option>Oli</option>
+<option>Todos</option>
+</select>
+</div>
+<div>
+<label>Fecha</label>
+<input id="date" type="date">
+</div>
+<div>
+<label>Hora</label>
+<input id="time" type="time">
+</div>
+<div>
+<label>Aviso previo</label>
+<select id="remind">
+<option value="0">Sin aviso</option>
+<option value="10">10 minutos</option>
+<option value="30">30 minutos</option>
+<option value="60">1 hora</option>
+<option value="1440">1 día</option>
+</select>
+</div>
+</div>
+
+<label>Notas</label>
+<textarea id="details" placeholder="Detalles..."></textarea>
+
+<label>Foto o documento</label>
+<input id="files" type="file" accept="image/*,.pdf,.doc,.docx" multiple>
+
+<button class="primary" type="submit">GUARDAR TAREA</button>
+</form>
+</section>
+
+<section id="list"></section>
+</main>
+
+<script>
+const KEY='agenda_liendos_v1';
+let tasks=JSON.parse(localStorage.getItem(KEY)||'[]');
+let view='all';
+
+const $=id=>document.getElementById(id);
+$('date').value=new Date().toISOString().slice(0,10);
+
+function save(){
+localStorage.setItem(KEY,JSON.stringify(tasks));
+render();
+}
+
+function escapeHTML(s){
+return String(s||'').replace(/[&<>"']/g,c=>({
+'&':'&amp;','<':'&lt;','>':'&gt;',
+'"':'&quot;',"'":'&#39;'
+}[c]));
+}
+
+function changeView(v,button){
+view=v;
+document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+button.classList.add('active');
+render();
+}
+
+$('taskForm').addEventListener('submit',async e=>{
+e.preventDefault();
+
+let attachments=[];
+for(const f of $('files').files){
+if(f.size>2*1024*1024){
+alert('El archivo supera 2 MB: '+f.name);
+continue;
+}
+let data=await new Promise(resolve=>{
+let reader=new FileReader();
+reader.onload=()=>resolve(reader.result);
+reader.readAsDataURL(f);
+});
+attachments.push({name:f.name,data});
+}
+
+tasks.push({
+id:Date.now(),
+title:$('title').value,
+person:$('person').value,
+date:$('date').value,
+time:$('time').value,
+remind:$('remind').value,
+details:$('details').value,
+attachments,
+done:false
+});
+
+$('taskForm').reset();
+$('date').value=new Date().toISOString().slice(0,10);
+save();
+});
+
+function render(){
+let list=$('list');
+list.innerHTML='';
+
+let today=new Date().toISOString().slice(0,10);
+
+let arr=tasks.filter(t=>{
+if(view==='today')return t.date===today;
+if(view==='upcoming')return !t.done && t.date>=today;
+return true;
+});
+
+arr.sort((a,b)=>(a.done-b.done)||(a.date||'9999').localeCompare(b.date||'9999'));
+
+if(!arr.length){
+list.innerHTML='<div class="empty">No hay tareas todavía.</div>';
+return;
+}
+
+arr.forEach(t=>{
+let card=document.createElement('article');
+card.className='task';
+
+let date=t.date?t.date.split('-').reverse().join('/'):'Sin fecha';
+
+card.innerHTML=`
+<h3>${escapeHTML(t.title)}</h3>
+<div class="meta">
+${escapeHTML(t.person)} · ${date} ${escapeHTML(t.time)}
+<br>${escapeHTML(t.details)}
+<br>${t.done?'Realizada':'Pendiente'}
+<br>${t.attachments.length} archivo(s)
+</div>
+<div class="actions">
+<button class="done">${t.done?'Reabrir':'Realizada'}</button>
+<button class="del">Eliminar</button>
+</div>`;
+
+card.querySelector('.done').onclick=()=>{
+t.done=!t.done;
+save();
+};
+
+card.querySelector('.del').onclick=()=>{
+if(confirm('¿Eliminar esta tarea?')){
+tasks=tasks.filter(x=>x.id!==t.id);
+save();
+}
+};
+
+list.appendChild(card);
+});
+}
+
+render();
+</script>
+</body>
+</html>
